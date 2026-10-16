@@ -2,11 +2,11 @@
 
 わんコメ（OneComme）の標準読み上げで、日本語を含むコメントだけ日本語音声に切り替える非公式プラグインです。英語などのコメントは、わんコメで選択している音声で読みます。
 
-従来の日本語自動切替はユーザーによる実機動作確認済みです。**v1.1.0で追加したサイト別音声設定は、模擬音声APIとブラウザUIで検証済みですが実音声は未確認です。**わんコメの内部実装に依存するため、すべてのバージョンでの動作を保証するものではありません。
+従来の日本語自動切替はユーザーによる実機動作確認済みです。**v1.2.0の枠別音声設定は、模擬音声APIとブラウザUIで検証済みですが実音声は未確認です。**わんコメの内部実装に依存するため、すべてのバージョンでの動作を保証するものではありません。
 
 ## ダウンロード・導入
 
-1. [Releases](https://github.com/orangeqoon/onecomme-plugin-auto-japanese-speech/releases) から `auto-japanese-speech-1.1.0.zip` をダウンロードして展開します。
+1. [Releases](https://github.com/orangeqoon/onecomme-plugin-auto-japanese-speech/releases) から `auto-japanese-speech-1.2.0.zip` をダウンロードして展開します。
 2. わんコメ右上メニュー →「プラグイン」→「プラグインフォルダ」を開きます。
 3. 展開した `auto-japanese-speech` フォルダを配置します。`plugins/auto-japanese-speech/plugin.js` となるようにしてください。
 4. プラグイン画面で「再読み込み」→「日本語コメント音声切替」を有効にします。
@@ -15,7 +15,25 @@
 
 APIキー・外部TTSサーバー・追加npmパッケージは不要です。わんコメで使用可能な日本語音声が必要です。Microsoft Sayakaを優先し、なければ利用可能な日本語音声を使います。
 
-## サイトごとの音声設定（v1.1.0）
+## 枠名ごとの設定（v1.2.0）
+
+設定画面は、わんコメに登録されている全枠を自動取得します。接続OFF・読み上げOFFの枠や、既定のサイト一覧にない枠も含みます。
+
+1. 枠の行で「この枠の設定」を選びます。
+2. 「通常の声」「日本語コメントの扱い」「日本語の声」を設定します。
+3. 「設定を保存」を押します。
+
+同じサイトの複数枠や同名の枠も、枠IDで区別します。枠名を変更しても設定は維持されます。枠を削除して作り直すと別のIDになり、自動で設定を転用しません。
+
+枠の個別設定 → サイト別設定 → わんコメ本体の音声の順で使います。「サイト設定を引き継ぐ」は従来のサイト別設定を使用します。個別設定内の空の「通常の声」は、サイトの声ではなく本体の声を維持します。日本語用の声が空の場合は共通日本語音声に従います。
+
+一覧は10秒ごとに自動更新され、編集中の音声選択は保持します。削除済み枠の設定は保存データに残し、ほかの枠に誤適用しません。この画面では接続・読み上げのON/OFFは変更しません。
+
+外部エンジンを設定している枠はエンジン名を表示し、内蔵音声用の選択欄を無効にします。外部TTSの割り当ては、わんコメ本体の「連携」と各枠の「… → 設定」で行います。[外部TTSの使い方と拡張案](EXTERNAL_TTS.md)を参照してください。
+
+権限は `filter.speech`・`services`・`config` です。`config` は既定エンジンの名前だけを読み取り、診断には設定全体や認証情報を含めません。枠一覧もID・名前・サイト種別・ON/OFF・エンジン名だけを返し、配信URLやログイン情報は返しません。
+
+## サイトごとの共通設定
 
 プラグイン一覧のURLボタンから設定画面を開きます。
 
@@ -30,11 +48,11 @@ APIキー・外部TTSサーバー・追加npmパッケージは不要です。�
 
 「設定を保存」を押すと永続化し、次の読み上げから反映します。音声のリストは利用中のわんコメから取得します。見つからない通常音声は本体設定へ、日本語音声は共通音声・利用可能な日本語音声へフォールバックします。
 
-一般のコメントテスターとサイト情報のない直接読み上げは「その他」です。サイトごとの確認は各サイトからのコメントで行ってください。表示コメントは加工しません。内部の `speechText` にはサイト識別マーカーが付き、Web Speech呼び出し直前に除去します。他の読み上げ文字列加工プラグインがマーカーを書き換えると正しく判定できない場合があります。
+一般のコメントテスターとサイト情報のない直接読み上げは「その他」です。サイトごとの確認は各サイトからのコメントで行ってください。表示コメントは加工しません。内部の `speechText` にはサイトと枠IDの識別マーカーが付き、Web Speech呼び出し直前に除去します。他の読み上げ文字列加工プラグインがマーカーを書き換えると正しく判定できない場合があります。
 
 外部エンジンは今回追加していません。外部エンジンが指定された読み上げは、サイト設定および標準音声用マーカーの対象外です。未知のサイト種別は「その他」になります。既定の日本語判定（漢字を含む）も引き継ぎます。
 
-更新時はプラグインを無効化し、`plugin.js` と `index.html` を上書きした後に再読み込み・有効化してください。`state.json` は残してください。新たに `filter.speech` と `services` を使用します。
+更新時はプラグインを無効化し、`plugin.js` と `index.html` を上書きした後に再読み込み・有効化してください。`state.json` は残してください。現在は `filter.speech`・`services`・`config` を使用します。
 
 ## 対応範囲
 
@@ -71,6 +89,10 @@ npm test
 
 不具合は [Issues](https://github.com/orangeqoon/onecomme-plugin-auto-japanese-speech/issues) に、OS・わんコメ版・選択音声・診断結果を添えて報告してください。コメント本文や個人情報の掲載は不要です。
 
+## 検証状況
+
+旧版の日本語自動切替はユーザーが実機動作確認済み。v1.2.0は同名別枠・改名・並び替え・枠追加・削除後の設定保持・継承・設定保存/再起動・外部エンジン除外・診断からのURL除去を模擬テストで確認しています。設定画面もヘッドレスブラウザで保存・自動更新・改名・未保存選択保持・HTML文字列表示を確認しています。枠別の実音声・外部エンジンでの実音声は未確認です。
+
 ## English
 
 Experimental unofficial OneComme plugin: comments containing Japanese characters use an available Japanese Web Speech voice; other comments keep the selected voice. Download the release ZIP, place its `auto-japanese-speech` folder in OneComme's plugins folder, reload and enable it. Use the default speech engine. Windows / OneComme 9.2.0-beta.0 was inspected; the original Japanese switching was user-verified, while the new per-site feature still needs real playback verification. Mixed-language comments and Han-only Chinese use the Japanese voice. External engines are unsupported. No API key or npm dependencies required.
@@ -83,3 +105,5 @@ MIT License / Copyright (c) 2026 orangeqoon. わんコメ公式との提携・�
 - [わんコメ公式プラグイン導入手順](https://onecomme.com/docs/feature/plugins/)
 
 Version 1.1.0 adds per-site normal/Japanese voice selectors, persistent settings and automatic fallback. Open the plugin URL to configure Niconico, FC2, Twitch, Kick, TwitCasting, YouTube and other sources.
+
+Version 1.2.0 discovers all registered OneComme frames and stores per-frame rules by stable ID. Rename-safe settings, disabled-frame visibility and periodic discovery are supported. External engines continue to use OneComme's native integrations; see EXTERNAL_TTS.md.

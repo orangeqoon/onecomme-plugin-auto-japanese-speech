@@ -4,15 +4,36 @@ const SITES = ['niconama', 'fc2', 'twitch', 'kick', 'twicas', 'youtube', 'other'
 function normalizeSettings(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('設定形式が不正です');
   const voice = v => { if (v === undefined) return ''; if (typeof v !== 'string' || v.length > 300) throw new Error('音声名が不正です'); return v; };
-  if (input.sites !== undefined && (!input.sites || typeof input.sites !== 'object' || Array.isArray(input.sites))) throw new Error('サイト設定が不正です');
-  const out = { japaneseVoice: voice(input.japaneseVoice), sites: {} };
-  for (const site of SITES) {
-    const r = input.sites?.[site] || {};
-    if (typeof r !== 'object' || Array.isArray(r)) throw new Error('サイト設定が不正です');
+  const dictionary = v => { if (v === undefined) return {}; if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('設定一覧が不正です'); return v; };
+  const rule = r => {
+    if (!r || typeof r !== 'object' || Array.isArray(r)) throw new Error('音声設定が不正です');
     if (r.japaneseMode !== undefined && !['auto', 'site'].includes(r.japaneseMode)) throw new Error('日本語設定が不正です');
-    out.sites[site] = { voice: voice(r.voice), japaneseVoice: voice(r.japaneseVoice), japaneseMode: r.japaneseMode || 'auto' };
+    return { voice: voice(r.voice), japaneseVoice: voice(r.japaneseVoice), japaneseMode: r.japaneseMode || 'auto' };
+  };
+  const out = { japaneseVoice: voice(input.japaneseVoice), sites: {}, frames: Object.create(null) };
+  const sites = dictionary(input.sites);
+  for (const site of SITES) out.sites[site] = rule(sites[site] === undefined ? {} : sites[site]);
+  const frames = Object.entries(dictionary(input.frames));
+  if (frames.length > 1000) throw new Error('枠の設定が多すぎます');
+  for (const [id, r] of frames) {
+    if (!id || id.length > 200 || /[\u0000-\u001f\u2063]/u.test(id)) throw new Error('枠IDが不正です');
+    if (r?.override !== undefined && typeof r.override !== 'boolean') throw new Error('枠設定の切替が不正です');
+    out.frames[id] = { ...rule(r), override: r.override === true };
   }
   return out;
+}
+function publicFrames(services, observed, defaultEngine) {
+  return (Array.isArray(services) ? services : []).filter(s => s && typeof s.id === 'string').map(s => {
+    let site = observed?.get(s.id) || 'other';
+    if (site === 'other') {
+      try {
+        const host = new URL(s.url || s.meta?.url || '').hostname.toLowerCase();
+        const domains = { 'nicovideo.jp':'niconama', 'youtube.com':'youtube', 'youtu.be':'youtube', 'twitch.tv':'twitch', 'kick.com':'kick', 'twitcasting.tv':'twicas', 'fc2.com':'fc2' };
+        for (const [domain, key] of Object.entries(domains)) if (host === domain || host.endsWith('.'+domain)) { site = key; break; }
+      } catch (_) { /* Blank URLs are valid for injected comment services. */ }
+    }
+    return { id: s.id, name: typeof s.name === 'string' && s.name ? s.name : '名前のない枠', site, enabled: s.enabled === true, speech: s.speech === true, engine: s.options?.speechType || defaultEngine || 'default' };
+  });
 }
 function siteKey(comment) {
   const raw = typeof comment?.service === 'string' ? comment.service.toLowerCase() : '';
@@ -26,9 +47,13 @@ function installInRenderer(settings) {
   const state = { settings, original: synth.speak, switched: 0, missing: 0 };
   state.wrapper = function (utterance) {
     const match = utterance && /^\u2063OCSITE:(niconama|fc2|twitch|kick|twicas|youtube|other)\u2063/u.exec(utterance.text || '');
-    const site = match ? match[1] : 'other';
-    if (match) utterance.text = utterance.text.slice(match[0].length);
-    const rule = state.settings.sites?.[site] || {};
+    const frameMatch = utterance && /^\u2063OCFRAME:(niconama|fc2|twitch|kick|twicas|youtube|other):([^\u2063]{0,1500})\u2063/u.exec(utterance.text || '');
+    const site = frameMatch ? frameMatch[1] : match ? match[1] : 'other';
+    let id = '';
+    if (frameMatch) { try { id = decodeURIComponent(frameMatch[2]); } catch (_) {} }
+    if (frameMatch || match) utterance.text = utterance.text.slice((frameMatch || match)[0].length);
+    const frameRule = Object.prototype.hasOwnProperty.call(state.settings.frames || {}, id) ? state.settings.frames[id] : null;
+    const rule = frameRule?.override ? frameRule : state.settings.sites?.[site] || {};
     const voices = synth.getVoices();
     let selected;
     if (utterance && rule.japaneseMode !== 'site' && /[\u3041-\u3096\u30a1-\u30fa\uff66-\uff9d\u3400-\u4dbf\u4e00-\u9fff]/u.test(utterance.text || '')) {
@@ -53,14 +78,14 @@ function removeFromRenderer() {
   if (state && window.speechSynthesis.speak === state.wrapper) { window.speechSynthesis.speak = state.original; delete window[key]; }
 }
 const plugin = {
-  name: '日本語コメント音声切替', uid: 'local.onecomme.auto-japanese-speech', version: '1.1.0', author: 'orangeqoon',
+  name: '日本語コメント音声切替', uid: 'local.onecomme.auto-japanese-speech', version: '1.2.0', author: 'orangeqoon',
   url: 'http://localhost:11180/plugins/local.onecomme.auto-japanese-speech/',
-  permissions: ['filter.speech', 'services'],
-  defaultState: { japaneseVoice: 'Microsoft Sayaka - Japanese (Japan)', sites: {} },
+  permissions: ['filter.speech', 'services', 'config'],
+  defaultState: { japaneseVoice: 'Microsoft Sayaka - Japanese (Japan)', sites: {}, frames: {} },
   init(api, initialData = {}) {
     const { app, BrowserWindow } = require('electron');
-    this.services = initialData.services || []; this.api = api; this.windows = new Map(); this.active = true; this.app = app;
-    this.settings = normalizeSettings({ japaneseVoice: api.store.get('japaneseVoice', this.defaultState.japaneseVoice), sites: api.store.get('sites', {}) });
+    this.services = Array.isArray(initialData.services) ? initialData.services : []; this.observedSites = new Map(); this.defaultEngine = initialData.config?.speech?.defaultEngine || 'default'; this.api = api; this.windows = new Map(); this.active = true; this.app = app;
+    this.settings = normalizeSettings({ japaneseVoice: api.store.get('japaneseVoice', this.defaultState.japaneseVoice), sites: api.store.get('sites', {}), frames: api.store.get('frames', {}) });
     this.attach = win => {
       if (!this.active || this.windows.has(win.id)) return;
       const wc = win.webContents;
@@ -76,15 +101,21 @@ const plugin = {
     this.created = (_event, win) => this.attach(win);
     app.on('browser-window-created', this.created); BrowserWindow.getAllWindows().forEach(this.attach);
   },
-  subscribe(type, services) { if (type === 'services' && Array.isArray(services)) this.services = services; },
+  subscribe(type, data) {
+    if (type === 'services' && Array.isArray(data)) this.services = data;
+    if (type === 'config' && data?.speech) this.defaultEngine = data.speech.defaultEngine || 'default';
+  },
   async filterSpeech(text, _user, config, comment) {
     if (typeof text !== 'string' || !text.trim()) return text;
     const service = this.services?.find(s => s.id === comment?.id);
-    const engine = service?.options?.speechType || config?.defaultEngine || 'default';
+    const engine = service?.options?.speechType || config?.defaultEngine || this.defaultEngine || 'default';
     if (engine !== 'default') return text;
-    // Carry site metadata with each utterance, never a global last-site or text lookup.
-    const body = text.replace(/^\u2063OCSITE:(niconama|fc2|twitch|kick|twicas|youtube|other)\u2063/u, '');
-    return `\u2063OCSITE:${siteKey(comment)}\u2063${body}`;
+    const site = siteKey(comment);
+    const id = typeof comment?.id === 'string' && comment.id.length <= 200 && !/[\u0000-\u001f\u2063]/u.test(comment.id) ? comment.id : '';
+    if (id) this.observedSites.set(id, site);
+    // Each utterance carries its own stable frame ID; frame names may change.
+    const body = text.replace(/^\u2063(?:OCSITE:(?:niconama|fc2|twitch|kick|twicas|youtube|other)|OCFRAME:(?:niconama|fc2|twitch|kick|twicas|youtube|other):[^\u2063]{0,1500})\u2063/u, '');
+    return `\u2063OCFRAME:${site}:${encodeURIComponent(id)}\u2063${body}`;
   },
   destroy() {
     this.active = false; this.app?.removeListener('browser-window-created', this.created);
@@ -97,8 +128,8 @@ const plugin = {
   async request(req) {
     if (req.method === 'PUT') {
       let next;
-      try { next = normalizeSettings(req.body); } catch (e) { return { code: 400, response: { error: e.message } }; }
-      try { this.api.store.set({ japaneseVoice: next.japaneseVoice, sites: next.sites }); this.settings = next; }
+      try { if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) throw new Error('設定形式が不正です'); next = normalizeSettings({ ...req.body, frames: req.body?.frames === undefined ? this.settings.frames : req.body.frames }); } catch (e) { return { code: 400, response: { error: e.message } }; }
+      try { this.api.store.set({ japaneseVoice: next.japaneseVoice, sites: next.sites, frames: next.frames }); this.settings = next; }
       catch (_) { return { code: 500, response: { error: '設定を保存できませんでした' } }; }
       await Promise.all(Array.from(this.windows.values(), ({ inject }) => inject()));
     } else if (req.method !== 'GET') return { code: 405, response: { error: 'GET / PUT only' } };
@@ -109,7 +140,7 @@ const plugin = {
         windows.push(await wc.executeJavaScript(`(() => { const s = window[${JSON.stringify(KEY)}]; return { installed: !!s, switched: s?.switched || 0, missing: s?.missing || 0, voices: window.speechSynthesis.getVoices().map(v => ({name:v.name,lang:v.lang})) }; })()`));
       } catch (_) { /* Window closed during status request. */ }
     }
-    return { code: 200, response: { version: this.version, settings: this.settings, windows } };
+    return { code: 200, response: { version: this.version, settings: this.settings, services: publicFrames(this.services, this.observedSites, this.defaultEngine), windows } };
   }
 };
 module.exports = plugin;
