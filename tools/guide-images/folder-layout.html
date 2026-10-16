@@ -1,0 +1,15 @@
+<!doctype html><html lang="ja"><meta charset="utf-8"><title>配置するフォルダ</title>
+<style>*{box-sizing:border-box}body{margin:0;width:1400px;background:#eef2f8;font-family:'Yu Gothic UI',Meiryo,sans-serif;color:#18243b;padding:54px 64px}h1{font-size:38px;margin:0 0 12px}header p{font-size:21px;color:#56647b;margin:0 0 30px}.columns{display:grid;grid-template-columns:1fr 1fr;gap:24px}.box{background:white;border:1px solid #dbe2f0;border-radius:16px;padding:28px}h2{font-size:25px;margin:0 0 20px}.ok{color:#18734c}.bad{color:#b44936}pre{font-family:Consolas,'Yu Gothic UI',monospace;font-size:24px;line-height:1.85;margin:0;white-space:pre-wrap}.good{background:#edf8f2;border:2px solid #81bca2;border-radius:10px;padding:16px 20px}.bad-tree{background:#fff2ef;border:1px solid #edb4a8;border-radius:10px;padding:16px 20px;font-size:22px}.box p{font-size:20px;line-height:1.75;color:#53617a}.important{background:#e6ecfd;padding:22px 28px;border-radius:12px;font-size:22px;line-height:1.8;margin-top:24px}.foot{font-size:16px;color:#627189;margin-top:24px}strong{color:#284fb7}</style>
+<header><h1>置くのは、ZIPの中の「auto-japanese-speech」</h1><p>わんコメの「プラグインフォルダ」を開いた場所で、次の形にします。</p></header>
+<div class="columns"><section class="box"><h2 class="ok">✓ 正しい配置</h2><div class="good"><pre>plugins/
+└─ auto-japanese-speech/
+   ├─ plugin.js
+   ├─ index.html
+   └─ README.md など</pre></div><p><strong>フォルダを1回開くと plugin.js が見える</strong><br>状態ならOKです。READMEなどの説明書も<br>一緒に置いたままでかまいません。</p></section>
+<section class="box"><h2 class="bad">× よくある置き間違い</h2><pre class="bad-tree">plugins/
+└─ auto-japanese-speech-1.2.0.zip</pre><p>ZIPをそのまま置いても読み込まれません。</p><pre class="bad-tree">plugins/
+└─ auto-japanese-speech/
+   └─ auto-japanese-speech/
+      └─ plugin.js</pre><p>フォルダが二重になっている場合は、<br><strong>plugin.js が入っている内側のフォルダ</strong>を<br>plugins の直下へ配置します。</p></section></div>
+<div class="important">配置できたら、わんコメで <strong>「再読み込み」→ 有効化</strong>。<br>更新するときは、先に無効化し、<strong>state.json は削除しない</strong>でください。</div>
+<p class="foot">フォルダ構成の説明図です。実際のエクスプローラーの画面写真ではありません。</p></html>
