@@ -4,13 +4,14 @@ const SITES = ['niconama', 'fc2', 'twitch', 'kick', 'twicas', 'youtube', 'other'
 function normalizeSettings(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('設定形式が不正です');
   const voice = v => { if (v === undefined) return ''; if (typeof v !== 'string' || v.length > 300) throw new Error('音声名が不正です'); return v; };
+  const volume = v => { if (v === undefined || v === null) return null; if (!Number.isInteger(v) || v < 0 || v > 100) throw new Error('音量は0から100の整数、または未指定にしてください'); return v; };
   const dictionary = v => { if (v === undefined) return {}; if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('設定一覧が不正です'); return v; };
   const rule = r => {
     if (!r || typeof r !== 'object' || Array.isArray(r)) throw new Error('音声設定が不正です');
     if (r.japaneseMode !== undefined && !['auto', 'site'].includes(r.japaneseMode)) throw new Error('日本語設定が不正です');
-    return { voice: voice(r.voice), japaneseVoice: voice(r.japaneseVoice), japaneseMode: r.japaneseMode || 'auto' };
+    return { voice: voice(r.voice), japaneseVoice: voice(r.japaneseVoice), japaneseMode: r.japaneseMode || 'auto', normalVolume: volume(r.normalVolume), japaneseVolume: volume(r.japaneseVolume) };
   };
-  const out = { japaneseVoice: voice(input.japaneseVoice), sites: {}, frames: Object.create(null) };
+  const out = { japaneseVoice: voice(input.japaneseVoice), normalVolume: volume(input.normalVolume), japaneseVolume: volume(input.japaneseVolume), sites: {}, frames: Object.create(null) };
   const sites = dictionary(input.sites);
   for (const site of SITES) out.sites[site] = rule(sites[site] === undefined ? {} : sites[site]);
   const frames = Object.entries(dictionary(input.frames));
@@ -56,7 +57,8 @@ function installInRenderer(settings) {
     const rule = frameRule?.override ? frameRule : state.settings.sites?.[site] || {};
     const voices = synth.getVoices();
     let selected;
-    if (utterance && rule.japaneseMode !== 'site' && /[\u3041-\u3096\u30a1-\u30fa\uff66-\uff9d\u3400-\u4dbf\u4e00-\u9fff]/u.test(utterance.text || '')) {
+    const isJapanese = !!utterance && /[\u3041-\u3096\u30a1-\u30fa\uff66-\uff9d\u3400-\u4dbf\u4e00-\u9fff]/u.test(utterance.text || '');
+    if (isJapanese && rule.japaneseMode !== 'site') {
       const ja = voices.filter(v => /^ja(?:[-_]|$)/i.test(v.lang));
       selected = ja.find(v => v.name === rule.japaneseVoice) || ja.find(v => v.name === state.settings.japaneseVoice) || ja.find(v => /Sayaka/i.test(v.name)) || ja[0];
       if (!selected) state.missing++;
@@ -66,6 +68,10 @@ function installInRenderer(settings) {
       if (!selected) state.missing++;
     }
     if (selected) { utterance.voice = selected; utterance.lang = selected.lang; state.switched++; }
+    const field = isJapanese ? 'japaneseVolume' : 'normalVolume';
+    const configuredVolume = rule[field] ?? state.settings[field];
+    // Explicit percentages override nonzero volume, but never unmute a muted utterance.
+    if (utterance && utterance.volume !== 0 && Number.isInteger(configuredVolume) && configuredVolume >= 0 && configuredVolume <= 100) utterance.volume = configuredVolume / 100;
     return state.original.call(synth, utterance);
   };
   synth.speak = state.wrapper;
@@ -78,14 +84,14 @@ function removeFromRenderer() {
   if (state && window.speechSynthesis.speak === state.wrapper) { window.speechSynthesis.speak = state.original; delete window[key]; }
 }
 const plugin = {
-  name: '日本語コメント音声切替', uid: 'local.onecomme.auto-japanese-speech', version: '1.2.0', author: 'orangeqoon',
+  name: '日本語コメント音声切替', uid: 'local.onecomme.auto-japanese-speech', version: '1.3.0', author: 'orangeqoon',
   url: 'http://localhost:11180/plugins/local.onecomme.auto-japanese-speech/',
   permissions: ['filter.speech', 'services', 'config'],
-  defaultState: { japaneseVoice: 'Microsoft Sayaka - Japanese (Japan)', sites: {}, frames: {} },
+  defaultState: { japaneseVoice: 'Microsoft Sayaka - Japanese (Japan)', normalVolume: null, japaneseVolume: null, sites: {}, frames: {} },
   init(api, initialData = {}) {
     const { app, BrowserWindow } = require('electron');
     this.services = Array.isArray(initialData.services) ? initialData.services : []; this.observedSites = new Map(); this.defaultEngine = initialData.config?.speech?.defaultEngine || 'default'; this.api = api; this.windows = new Map(); this.active = true; this.app = app;
-    this.settings = normalizeSettings({ japaneseVoice: api.store.get('japaneseVoice', this.defaultState.japaneseVoice), sites: api.store.get('sites', {}), frames: api.store.get('frames', {}) });
+    this.settings = normalizeSettings({ japaneseVoice: api.store.get('japaneseVoice', this.defaultState.japaneseVoice), normalVolume: api.store.get('normalVolume', null), japaneseVolume: api.store.get('japaneseVolume', null), sites: api.store.get('sites', {}), frames: api.store.get('frames', {}) });
     this.attach = win => {
       if (!this.active || this.windows.has(win.id)) return;
       const wc = win.webContents;
@@ -128,8 +134,8 @@ const plugin = {
   async request(req) {
     if (req.method === 'PUT') {
       let next;
-      try { if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) throw new Error('設定形式が不正です'); next = normalizeSettings({ ...req.body, frames: req.body?.frames === undefined ? this.settings.frames : req.body.frames }); } catch (e) { return { code: 400, response: { error: e.message } }; }
-      try { this.api.store.set({ japaneseVoice: next.japaneseVoice, sites: next.sites, frames: next.frames }); this.settings = next; }
+      try { if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) throw new Error('設定形式が不正です'); next = normalizeSettings({ ...req.body, normalVolume: req.body.normalVolume === undefined ? this.settings.normalVolume : req.body.normalVolume, japaneseVolume: req.body.japaneseVolume === undefined ? this.settings.japaneseVolume : req.body.japaneseVolume, frames: req.body?.frames === undefined ? this.settings.frames : req.body.frames }); } catch (e) { return { code: 400, response: { error: e.message } }; }
+      try { this.api.store.set({ japaneseVoice: next.japaneseVoice, normalVolume: next.normalVolume, japaneseVolume: next.japaneseVolume, sites: next.sites, frames: next.frames }); this.settings = next; }
       catch (_) { return { code: 500, response: { error: '設定を保存できませんでした' } }; }
       await Promise.all(Array.from(this.windows.values(), ({ inject }) => inject()));
     } else if (req.method !== 'GET') return { code: 405, response: { error: 'GET / PUT only' } };

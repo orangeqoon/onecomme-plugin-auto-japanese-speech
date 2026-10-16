@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0 — 2026-10-16
+- Add separate normal/non-Japanese and Japanese volume percentages globally and per frame/site.
+- Preserve the original volume when unset and never unmute an utterance whose volume is zero.
+- Keep language-based volume independent of voice selection, including same-voice mode.
+- Preserve numeric settings and focused input during frame polling; validate 0–100 integers in the UI and API.
+- Update the illustrated guide and tests. Real audible volume differences remain unverified.
+
 ## 1.2.0 — 2026-10-16
 - Discover all registered OneComme frames, including disabled/unknown-site frames.
 - Add per-frame rules keyed by stable IDs, with inheritance from site defaults.

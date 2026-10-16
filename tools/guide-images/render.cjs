@@ -19,8 +19,8 @@ const output = path.join(root, 'docs/images');
       await page.screenshot({ path: path.join(output, name), fullPage: true });
     }
     const settings = {
-      japaneseVoice: 'Microsoft Sayaka - Japanese (Japan)', sites: {}, frames: {
-        'demo-twitch': { override: true, voice: 'English voice (example)', japaneseMode: 'auto', japaneseVoice: 'Microsoft Haruka - Japanese (Japan)' },
+      japaneseVoice: 'Microsoft Sayaka - Japanese (Japan)', normalVolume: 80, japaneseVolume: 40, sites: {}, frames: {
+        'demo-twitch': { override: true, normalVolume: 80, japaneseVolume: 40, voice: 'English voice (example)', japaneseMode: 'auto', japaneseVoice: 'Microsoft Haruka - Japanese (Japan)' },
         'demo-nico': { override: true, voice: 'Microsoft Ayumi - Japanese (Japan)', japaneseMode: 'site', japaneseVoice: '' }
       }
     };
@@ -38,7 +38,7 @@ const output = path.join(root, 'docs/images');
     await page.route('http://127.0.0.1:19384/**', async route => {
       if (route.request().url().includes('/api/plugins/')) {
         if (route.request().method() === 'PUT') Object.assign(settings, route.request().postDataJSON());
-        return route.fulfill({json:{code:200,response:{version:'1.2.0',settings,services,windows:[{installed:true,voices}]}}});
+        return route.fulfill({json:{code:200,response:{version:'1.3.0',settings,services,windows:[{installed:true,voices}]}}});
       }
       return route.fulfill({contentType:'text/html',body:fs.readFileSync(path.join(root,'index.html'),'utf8')});
     });
@@ -66,6 +66,7 @@ const output = path.join(root, 'docs/images');
       button.before(label);
     });
     const bottom = await page.locator('.card').nth(1).boundingBox();
+    await page.setViewportSize({width:1400,height:Math.max(1050,Math.ceil(bottom.y+bottom.height+12))});
     await page.screenshot({path:path.join(output,'03-voice-settings.png'),clip:{x:0,y:0,width:1400,height:Math.ceil(bottom.y+bottom.height+12)}});
     assert.deepEqual(errors,[]);
     console.log('Created 3 guide images; settings screenshot uses the real plugin UI with synthetic data and numbered annotations.');

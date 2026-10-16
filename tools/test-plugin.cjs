@@ -11,7 +11,7 @@ async function main(){
  vm.runInContext(source+';module.exports.test={installInRenderer,removeFromRenderer,normalizeSettings,siteKey}',ctx);
  const plugin=ctx.module.exports,helpers=plugin.test;const original=synth.speak;
  plugin.init({store},{});await Promise.resolve();
- function speak(text){const u={text,voice:voices[0],rate:1.2,volume:.32,pitch:.9};synth.speak(u);return u}
+ function speak(text,volume=.32){const u={text,voice:voices[0],rate:1.2,volume,pitch:.9};synth.speak(u);return u}
  for(const text of ['こんにちは','日本語','カタカナ','ﾊﾛｰ','Hello 日本語'])assert.equal(speak(text).voice,voices[2]);
  for(const text of ['Hello world','Bonjour','안녕하세요','123 😀'])assert.equal(speak(text).voice,voices[0]);
  const settings={japaneseVoice:voices[2].name,sites:{twitch:{voice:'English A',japaneseVoice:'Japanese B'},kick:{voice:'English B'},niconama:{voice:'Japanese B',japaneseMode:'site'},fc2:{voice:'Japanese B',japaneseMode:'site'},twicas:{voice:'Japanese B',japaneseMode:'site'}}};
@@ -49,13 +49,31 @@ async function main(){
  assert.equal(speak('\u2063OCFRAME:kick:%broken\u2063hello').text,'hello');
  plugin.subscribe('config',{speech:{defaultEngine:'voicevox'}});assert.equal(await plugin.filterSpeech('hello',null,{}, {id:'new-frame',service:'kick'}),'hello');plugin.subscribe('config',{speech:{defaultEngine:'default'}});
  const finalStatus=await plugin.request({method:'GET'});assert.ok(finalStatus.response.services.every(s=>!('url' in s)&&!('meta' in s)&&!('options' in s)));assert.equal(stored.frames['deleted-frame'].voice,'Japanese B');
+ // Shared and per-rule percentages are independent of the chosen voice.
+ const volumeSettings={...settings,normalVolume:80,japaneseVolume:35};
+ await plugin.request({method:'PUT',body:volumeSettings});assert.equal(speak('Hello').volume,.8);assert.equal(speak('Bonjour').volume,.8);assert.equal(speak('안녕하세요').volume,.8);assert.equal(speak('こんにちは').volume,.35);assert.equal(speak('Hello 日本語').volume,.35);
+ assert.equal(speak(await plugin.filterSpeech('日本語',null,{}, {service:'niconama'})).volume,.35);
+ const perFrame={...volumeSettings,sites:{...settings.sites,kick:{voice:'English B',normalVolume:50,japaneseVolume:45}},frames:{...stored.frames,'volume-frame':{override:true,voice:'English A',japaneseMode:'site',normalVolume:60,japaneseVolume:20},'silent-frame':{override:true,normalVolume:100,japaneseVolume:0}}};
+ await plugin.request({method:'PUT',body:perFrame});
+ const volumeText=await plugin.filterSpeech('日本語',null,{}, {id:'volume-frame',service:'kick'});const japaneseSameVoice=speak(volumeText);assert.equal(japaneseSameVoice.voice.name,'English A');assert.equal(japaneseSameVoice.volume,.2);
+ assert.equal(speak(await plugin.filterSpeech('hello',null,{}, {id:'volume-frame',service:'kick'})).volume,.6);
+ assert.equal(speak(await plugin.filterSpeech('hello',null,{}, {id:'unconfigured',service:'kick'})).volume,.5);assert.equal(speak(await plugin.filterSpeech('日本語',null,{}, {id:'unconfigured',service:'kick'})).volume,.45);
+ assert.equal(speak(await plugin.filterSpeech('日本語',null,{}, {id:'silent-frame',service:'kick'})).volume,0);assert.equal(speak(await plugin.filterSpeech('hello',null,{}, {id:'silent-frame',service:'kick'})).volume,1);
+ assert.equal(speak(await plugin.filterSpeech('hello',null,{}, {id:'silent-frame',service:'kick'}),0).volume,0);assert.equal(speak('日本語',0).volume,0);
+ const invalidVolumes=[-1,101,50.5,'50',false,NaN,Infinity];const volumeSnapshot=JSON.stringify(stored);
+ for(const v of invalidVolumes){for(const body of [{normalVolume:v},{japaneseVolume:v},{sites:{kick:{normalVolume:v}}},{frames:{x:{override:true,japaneseVolume:v}}}])assert.equal((await plugin.request({method:'PUT',body})).code,400)}assert.equal(JSON.stringify(stored),volumeSnapshot);
+ const legacy=helpers.normalizeSettings(settings);assert.equal(legacy.normalVolume,null);assert.equal(legacy.japaneseVolume,null);assert.equal(legacy.sites.kick.normalVolume,null);
+ // Old API clients omit the shared fields: do not reset the user's shared volumes.
+ await plugin.request({method:'PUT',body:settings});assert.equal(stored.normalVolume,80);assert.equal(stored.japaneseVolume,35);
+ await plugin.request({method:'PUT',body:{...settings,normalVolume:null,japaneseVolume:null}});assert.equal(speak('hello').volume,.32);assert.equal(speak('日本語').volume,.32);
+ await plugin.request({method:'PUT',body:volumeSettings});
  const before=JSON.stringify(stored);assert.equal((await plugin.request({method:'PUT',body:{sites:{kick:{japaneseMode:'bad'}}}})).code,400);assert.equal(JSON.stringify(stored),before);
  const previous=plugin.settings;store.set=()=>{throw Error('disk failure')};assert.equal((await plugin.request({method:'PUT',body:settings})).code,500);assert.equal(plugin.settings,previous);store.set=values=>Object.assign(stored,values);
  assert.equal((await plugin.request({method:'POST'})).code,405);
  const wrapper=synth.speak;await wc.executeJavaScript(`(${helpers.installInRenderer.toString()})(${JSON.stringify(settings)})`);assert.equal(synth.speak,wrapper);
  const available=voices;voices=[];assert.equal(speak('日本語').voice,undefined);voices=available;
  plugin.destroy();await Promise.resolve();assert.equal(synth.speak,original);assert.equal(app.listenerCount('browser-window-created'),0);assert.equal(wc.listenerCount('did-finish-load'),0);
- plugin.init({store},{});await Promise.resolve();assert.equal(plugin.settings.sites.kick.voice,'English B');assert.equal(plugin.settings.frames['deleted-frame'].voice,'Japanese B');assert.equal(speak(await plugin.filterSpeech('same text',null,{}, {service:'kick'})).voice.name,'English B');plugin.destroy();
- console.log('PASS: frame ID routing/rename/same names/Unicode/inheritance/discovery/privacy and legacy language routing, identical queued site texts, Japanese/site overrides, aliases, external engine bypass, metadata stripping, validation, persistence/restart, save failure, lifecycle cleanup and speech properties');
+ plugin.init({store},{});await Promise.resolve();assert.equal(plugin.settings.normalVolume,80);assert.equal(plugin.settings.japaneseVolume,35);assert.equal(plugin.settings.sites.kick.voice,'English B');assert.equal(plugin.settings.frames['deleted-frame'].voice,'Japanese B');assert.equal(speak(await plugin.filterSpeech('same text',null,{}, {service:'kick'})).voice.name,'English B');plugin.destroy();
+ console.log('PASS: normal/Japanese volumes, zero, global/site/frame inheritance, mute preservation, migration, persistence, strict validation and frame ID routing/rename/same names/Unicode/inheritance/discovery/privacy and legacy language routing, identical queued site texts, Japanese/site overrides, aliases, external engine bypass, metadata stripping, validation, persistence/restart, save failure, lifecycle cleanup and speech properties');
 }
 main().catch(e=>{console.error(e);process.exitCode=1});
