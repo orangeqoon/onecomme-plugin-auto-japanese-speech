@@ -1,0 +1,14 @@
+{
+  "name": "onecomme-plugin-auto-japanese-speech",
+  "version": "1.0.1",
+  "private": true,
+  "description": "Switch Japanese comments to a Japanese Web Speech voice in OneComme",
+  "main": "plugin.js",
+  "scripts": { "test": "node tools/test-plugin.cjs", "check": "node --check plugin.js" },
+  "keywords": ["onecomme", "onecomme-plugin", "tts", "japanese"],
+  "author": "orangeqoon",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/orangeqoon/onecomme-plugin-auto-japanese-speech.git" },
+  "homepage": "https://github.com/orangeqoon/onecomme-plugin-auto-japanese-speech#readme",
+  "bugs": { "url": "https://github.com/orangeqoon/onecomme-plugin-auto-japanese-speech/issues" }
+}

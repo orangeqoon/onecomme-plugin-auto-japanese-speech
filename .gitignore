@@ -1,0 +1,5 @@
+state.json
+config.json
+*.log
+node_modules/
+dist/

@@ -1,0 +1,10 @@
+<!doctype html><html lang="ja"><meta charset="utf-8"><title>日本語コメント音声切替</title>
+<style>body{font:16px sans-serif;max-width:760px;margin:40px auto;padding:20px;line-height:1.8}pre{white-space:pre-wrap;background:#eee;padding:20px}button{padding:10px}</style>
+<h1>日本語コメント音声切替</h1>
+<p>日本語を含む読み上げは日本語音声に切り替わります。英語などのコメントは、わんコメで選択している音声を使います。</p>
+<p>対象：標準の読み上げエンジン。VOICEVOX・SAPI5等の外部エンジンには適用されません。日英混在のコメントは全体を日本語音声で読みます。漢字だけの中国語も日本語判定になります。</p>
+<button id="refresh">状態を確認</button><pre id="status">確認中…</pre>
+<script>
+async function refresh(){try{const r=await fetch('/api/plugins/local.onecomme.auto-japanese-speech');if(!r.ok)throw Error(r.status);document.getElementById('status').textContent=JSON.stringify(await r.json(),null,2)}catch(e){document.getElementById('status').textContent='取得できませんでした：'+e.message}}
+document.getElementById('refresh').onclick=refresh;refresh();
+</script></html>
