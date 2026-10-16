@@ -1,76 +1,37 @@
 # 日本語コメント音声切替 / Auto Japanese Speech
 
-**配信の枠ごとに声を選び、日本語コメントだけ日本語の声で読む**わんコメ用の非公式プラグインです。
+わんコメの通常音声・音量をそのまま表示し、日本語コメント用の声・音量だけ追加する非公式プラグインです。通常の設定もこの画面から本体へ保存でき、本体の設定変更は5秒ごとに表示へ反映します。
 
-例えば、Twitchの枠は「英語音声＋日本語Haruka」、日本語中心の枠は「Ayumiで統一」といった使い分けができます。同じサイトの複数枠にも対応します。
+**[画像付き導入ガイド](docs/GETTING_STARTED.md)** · [v2.0.0の配布ZIP](https://github.com/orangeqoon/onecomme-plugin-auto-japanese-speech/releases/download/v2.0.0/auto-japanese-speech-2.0.0.zip) · [Releaseページ](https://github.com/orangeqoon/onecomme-plugin-auto-japanese-speech/releases/tag/v2.0.0)
 
-**[はじめての方はこちら：画像付き導入ガイド](docs/GETTING_STARTED.md)**
+![本体と同期する通常設定と、日本語用設定の2列に整理した画面](docs/images/03-voice-settings.png)
 
-[配布ZIPをダウンロード（v1.3.0）](https://github.com/orangeqoon/onecomme-plugin-auto-japanese-speech/releases/download/v1.3.0/auto-japanese-speech-1.3.0.zip) · [Releaseページ](https://github.com/orangeqoon/onecomme-plugin-auto-japanese-speech/releases/tag/v1.3.0)
+枠名と音声一覧は説明用の架空データです。実際にはご自身の枠とPCの音声が表示されます。
 
-![ZIPのダウンロードから設定・確認までの6ステップ](docs/images/01-installation.png)
+## 使い方
 
-*操作案内図です。わんコメなどの実画面写真ではありません。*
+1. ZIPを展開し、`auto-japanese-speech`フォルダをわんコメのプラグインフォルダに入れます。
+2. わんコメのプラグイン画面で「再読み込み」→「日本語コメント音声切替」を有効化。
+3. プラグインのURLボタンから設定画面を開きます。
+4. 左の「通常」は本体の現在値です。右の「日本語」の声・音量を選び、「変更を保存」。
 
-## できること
+例えばTwitchは通常を英語音声80%、日本語をSayaka40%にします。日本語中心の枠は「通常と同じ」を選べば、声を二重管理する必要がありません。日本語の音量は空欄で通常と同じになります。
 
-- わんコメに登録してある枠名を自動取得。接続OFFの枠も設定対象にできます。
-- 枠ごとに「通常の声」「日本語の声」を選択。通常（英語など）と日本語で音量も別々に指定できます。
-- 日本語も同じ声で読む設定や、サイト共通の設定を引き継ぐ設定。
-- 枠名を変更しても設定を維持。枠一覧は自動で更新。
+v2では「共通」「サイト」「この枠の設定」の切り替えを廃止しました。通常の設定は本体だけ、日本語の追加設定は枠IDごとに保持します。枠の改名や同一サイトの複数枠にも対応します。
 
-## 導入の流れ
+## 旧版からの更新
 
-1. 配布ZIPをダウンロードし、右クリック → **「すべて展開」**。
-2. わんコメの右上メニュー → **「プラグイン」→「プラグインフォルダ」**を開く。
-3. ZIP内の **`auto-japanese-speech` フォルダ**を、開いた場所へコピー。
-4. わんコメで **「再読み込み」→「日本語コメント音声切替」を有効化**。
-5. プラグインのURLボタンから設定画面を開き、声を選んで保存。
-
-Node.jsやAPIキー、GitHubアカウントは不要です。最初はわんコメの**内蔵音声エンジン（標準）**で使います。
-
-フォルダの置き方や、音が出ない場合の確認は[画像付き導入ガイド](docs/GETTING_STARTED.md)にまとめています。
-
-## 設定画面の見本
-
-![実際の設定画面を説明用データで表示した見本。枠ごとの設定、通常音声、日本語音声、保存ボタンに番号を付けています](docs/images/03-voice-settings.png)
-
-*枠名・音声一覧は説明用サンプルです。番号を追加し、画面の下部を省略しています。実際にはご自身の枠とPCの音声が表示されます。*
-
-「この枠の設定」を選び、通常の声と日本語の声を選んで「設定を保存」を押します。声はPCで利用できるものから選びます。このプラグインが新しい音声をインストールすることはありません。
-
-## 英語などと日本語の音量を変える（v1.3.0）
-
-設定画面の共通設定で、例えば「通常（英語など）の音量」を80、「日本語の音量」を40にして保存します。全枠に共通の値として使われます。
-
-枠やサイトの各行でも、声の選択欄の下にある「音量 %」で個別指定できます。0〜100の整数で、0は無音・100は最大です。空欄なら共通設定へ、共通も空欄ならわんコメの元の音量へ従います。数値は元の音量に掛ける倍率ではなく、読み上げの音量を直接指定する値です。
-
-「同じ声を使う」設定でも、日本語コメントだけ別音量にできます。わんコメ側から音量0で送られた読み上げは、プラグインで音量を指定していても無音を維持します。外部TTSは対象外です。
+`plugin.js`・`native-sync.js`・`index.html`を上書きし、`state.json`は残してください。再読み込み後、「移行内容を確認」で本体の現在値と移行後の値を確認し、「この内容で移行する」を押します。確認前は旧版の読み上げを続けます。通常設定を本体へ書き込むのはこの操作時です。旧設定データも保存先に残します。
 
 ## 対応範囲
 
-| 項目 | 内容 |
-| --- | --- |
-| 調査対象 | Windows / わんコメ9.2.0-beta.0。他の版・OSは未確認 |
-| 音声 | わんコメの内蔵音声。利用可能な日本語音声が必要 |
-| 外部TTS | わんコメ本体の連携と共存。外部の話者選択は本体で行う |
-| 混在する言語 | 日本語を含むコメント全体を日本語音声で読む。漢字だけの中国語も日本語判定 |
-| 翻訳 | 翻訳機能ではなく、読む声を切り替える機能 |
+- 調査対象：Windows / わんコメ9.2.0-beta.0。他の版・OSは未確認です。
+- 内蔵のWeb Speech音声向け。日本語を含むコメント全体を日本語音声で読み、翻訳や文中の言語分割はしません。漢字だけの中国語も日本語判定になります。
+- 英語以外の通常音声もPCで利用できれば選択できます。自動判定は日本語／それ以外の2区分です。
+- 通常の音量は本体の0〜200%を保持。日本語の追加音量は0〜100%、0は無音です。本体から音量0で送られた発話は無音を維持します。
+- VOICEVOXなどの外部TTSは本体で設定します。[外部TTSガイド](EXTERNAL_TTS.md)。同一枠内で言語ごとに外部エンジンを切り替える機能は未実装です。
+- わんコメのローカルAPI（既定の11180番ポート）と内部の音声再生処理を使います。本体更新時は再検証が必要です。アプリ本体のファイルは変更しません。
 
-旧版の日本語自動切替はユーザー実機確認済みです。v1.3.0の枠別機能は模擬再生・ブラウザUI・登録枠データで検証済みですが、実音声は未確認の試験公開版です。[詳しい検証情報](docs/TECHNICAL.md)
+## 開発
 
-## もっと詳しく
-
-- [画像付き導入ガイド・困ったとき・更新方法](docs/GETTING_STARTED.md)
-- [VOICEVOX・AivisSpeech・COEIROINK・棒読みちゃん等の使い方](EXTERNAL_TTS.md)
-- [技術仕様・権限・開発・検証情報](docs/TECHNICAL.md)
-- [変更履歴](CHANGELOG.md)
-- [不具合の報告](https://github.com/orangeqoon/onecomme-plugin-auto-japanese-speech/issues)
-
-## English
-
-Unofficial OneComme plugin for per-frame Web Speech voices and automatic Japanese voice selection. Download the release ZIP, extract it, copy its `auto-japanese-speech` folder into OneComme's plugins folder, reload and enable the plugin. Open the plugin URL to configure voices. Windows / OneComme 9.2.0-beta.0 was inspected; other versions/OS are unverified. No API key or Node.js installation is required for users. External speech engines are configured through OneComme's own integrations. New per-frame playback remains unverified on real audio.
-
-## ライセンス
-
-[MIT License](LICENSE) / Copyright (c) 2026 orangeqoon。わんコメ公式との提携・公式サポートを示すものではありません。わんコメと各音声の利用条件は、それぞれの配布元に従ってください。
+Node.js 22で`npm run check`、`npm test`。音声ルーティング、本体への最小限の保存、競合、旧設定の移行、保存失敗を模擬検証します。[技術仕様](docs/TECHNICAL.md) · [画像について](docs/IMAGE_NOTES.md) · [変更履歴](CHANGELOG.md) · [MIT License](LICENSE)

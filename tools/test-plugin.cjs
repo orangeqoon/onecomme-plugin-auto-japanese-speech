@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('fs'),vm=require('vm'),assert=require('assert/strict'),path=require('path'),{EventEmitter}=require('events');
-const source=fs.readFileSync(path.resolve(__dirname,'../plugin.js'),'utf8');
+const source=fs.readFileSync(path.resolve(__dirname,'../plugin.js'),'utf8').replace("module.exports = require('./native-sync')(plugin, { publicFrames, normalizeSettings });", 'module.exports = plugin;');
 async function main(){
  const calls=[];let voices=[{name:'English A',lang:'en-US'},{name:'English B',lang:'en-GB'},{name:'Microsoft Sayaka - Japanese (Japan)',lang:'ja-JP'},{name:'Japanese B',lang:'ja-JP'}];
  const synth={getVoices:()=>voices,speak(u){calls.push({...u})}};

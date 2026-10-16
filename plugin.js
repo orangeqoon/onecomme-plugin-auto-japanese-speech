@@ -54,22 +54,22 @@ function installInRenderer(settings) {
     if (frameMatch) { try { id = decodeURIComponent(frameMatch[2]); } catch (_) {} }
     if (frameMatch || match) utterance.text = utterance.text.slice((frameMatch || match)[0].length);
     const frameRule = Object.prototype.hasOwnProperty.call(state.settings.frames || {}, id) ? state.settings.frames[id] : null;
-    const rule = frameRule?.override ? frameRule : state.settings.sites?.[site] || {};
+    const rule = state.settings.nativeSync ? (state.settings.japaneseFrames?.[id] || {}) : frameRule?.override ? frameRule : state.settings.sites?.[site] || {};
     const voices = synth.getVoices();
     let selected;
     const isJapanese = !!utterance && /[\u3041-\u3096\u30a1-\u30fa\uff66-\uff9d\u3400-\u4dbf\u4e00-\u9fff]/u.test(utterance.text || '');
-    if (isJapanese && rule.japaneseMode !== 'site') {
+    if (isJapanese && (state.settings.nativeSync ? rule.voice !== '@same' : rule.japaneseMode !== 'site')) {
       const ja = voices.filter(v => /^ja(?:[-_]|$)/i.test(v.lang));
-      selected = ja.find(v => v.name === rule.japaneseVoice) || ja.find(v => v.name === state.settings.japaneseVoice) || ja.find(v => /Sayaka/i.test(v.name)) || ja[0];
+      selected = ja.find(v => v.name === (state.settings.nativeSync ? rule.voice : rule.japaneseVoice)) || ja.find(v => v.name === state.settings.japaneseVoice) || (state.settings.nativeSync && /^ja(?:[-_]|$)/i.test(utterance.voice?.lang || '') ? utterance.voice : undefined) || ja.find(v => /Sayaka/i.test(v.name)) || ja[0];
       if (!selected) state.missing++;
     }
-    if (!selected && rule.voice) {
+    if (!selected && !state.settings.nativeSync && rule.voice) {
       selected = voices.find(v => v.name === rule.voice);
       if (!selected) state.missing++;
     }
     if (selected) { utterance.voice = selected; utterance.lang = selected.lang; state.switched++; }
     const field = isJapanese ? 'japaneseVolume' : 'normalVolume';
-    const configuredVolume = rule[field] ?? state.settings[field];
+    const configuredVolume = state.settings.nativeSync ? (isJapanese ? rule.volume : null) : rule[field] ?? state.settings[field];
     // Explicit percentages override nonzero volume, but never unmute a muted utterance.
     if (utterance && utterance.volume !== 0 && Number.isInteger(configuredVolume) && configuredVolume >= 0 && configuredVolume <= 100) utterance.volume = configuredVolume / 100;
     return state.original.call(synth, utterance);
@@ -84,7 +84,7 @@ function removeFromRenderer() {
   if (state && window.speechSynthesis.speak === state.wrapper) { window.speechSynthesis.speak = state.original; delete window[key]; }
 }
 const plugin = {
-  name: '日本語コメント音声切替', uid: 'local.onecomme.auto-japanese-speech', version: '1.3.0', author: 'orangeqoon',
+  name: '日本語コメント音声切替', uid: 'local.onecomme.auto-japanese-speech', version: '2.0.0', author: 'orangeqoon',
   url: 'http://localhost:11180/plugins/local.onecomme.auto-japanese-speech/',
   permissions: ['filter.speech', 'services', 'config'],
   defaultState: { japaneseVoice: 'Microsoft Sayaka - Japanese (Japan)', normalVolume: null, japaneseVolume: null, sites: {}, frames: {} },
@@ -114,7 +114,7 @@ const plugin = {
   async filterSpeech(text, _user, config, comment) {
     if (typeof text !== 'string' || !text.trim()) return text;
     const service = this.services?.find(s => s.id === comment?.id);
-    const engine = service?.options?.speechType || config?.defaultEngine || this.defaultEngine || 'default';
+    const engine = this.resolveEngine ? this.resolveEngine(service, config) : service?.options?.speechType || config?.defaultEngine || this.defaultEngine || 'default';
     if (engine !== 'default') return text;
     const site = siteKey(comment);
     const id = typeof comment?.id === 'string' && comment.id.length <= 200 && !/[\u0000-\u001f\u2063]/u.test(comment.id) ? comment.id : '';
@@ -149,4 +149,4 @@ const plugin = {
     return { code: 200, response: { version: this.version, settings: this.settings, services: publicFrames(this.services, this.observedSites, this.defaultEngine), windows } };
   }
 };
-module.exports = plugin;
+module.exports = require('./native-sync')(plugin, { publicFrames, normalizeSettings });
