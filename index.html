@@ -1,10 +1,40 @@
-<!doctype html><html lang="ja"><meta charset="utf-8"><title>日本語コメント音声切替</title>
-<style>body{font:16px sans-serif;max-width:760px;margin:40px auto;padding:20px;line-height:1.8}pre{white-space:pre-wrap;background:#eee;padding:20px}button{padding:10px}</style>
-<h1>日本語コメント音声切替</h1>
-<p>日本語を含む読み上げは日本語音声に切り替わります。英語などのコメントは、わんコメで選択している音声を使います。</p>
-<p>対象：標準の読み上げエンジン。VOICEVOX・SAPI5等の外部エンジンには適用されません。日英混在のコメントは全体を日本語音声で読みます。漢字だけの中国語も日本語判定になります。</p>
-<button id="refresh">状態を確認</button><pre id="status">確認中…</pre>
+<!doctype html>
+<html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>サイト別・読み上げの声</title>
+<style>
+:root{font-family:system-ui,sans-serif;color:#202534;background:#f4f6fa}body{max-width:1080px;margin:32px auto;padding:0 20px}h1{font-size:26px;margin-bottom:8px}p{line-height:1.8;color:#535c6c}.card{background:white;border:1px solid #dce1eb;border-radius:12px;padding:22px;margin:20px 0}select{max-width:100%;width:100%;padding:10px;border:1px solid #b9c3d5;border-radius:6px;background:white}table{width:100%;border-collapse:collapse;min-width:780px}th,td{text-align:left;padding:12px 8px;border-bottom:1px solid #e7eaf0}th{font-size:13px;color:#535c6c}td:first-child{white-space:nowrap;font-weight:600}.scroll{overflow-x:auto}button{padding:11px 22px;border:0;border-radius:7px;background:#355bd6;color:white;cursor:pointer}button:disabled{opacity:.5}#refresh{background:#e6ebf5;color:#27334d}#message{margin-left:12px;white-space:pre-wrap}.help{font-size:14px}.global{max-width:480px}details{margin-top:18px}pre{white-space:pre-wrap;font-size:12px}.actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+</style>
+<h1>サイト別・読み上げの声</h1>
+<p>通常の声をサイトごとに選び、日本語コメントだけ別の声に切り替えられます。空欄は、わんコメ本体の音声を引き継ぎます。</p>
+<div class="card"><label for="global">共通の日本語音声</label><p class="help">サイトの日本語音声が未指定の場合に使います。「自動選択」は利用可能な日本語音声を選びます。</p><div class="global"><select id="global" disabled></select></div></div>
+<div class="card"><div class="scroll"><table><thead><tr><th>サイト</th><th>通常の声</th><th>日本語コメント</th><th>日本語の声</th></tr></thead><tbody id="rows"></tbody></table></div>
+<p class="help">「同じ声を使う」は、日本語も「通常の声」で読みます。ツイキャスなど日本語だけで使う場合にも選べます。声の一覧は、このPCでわんコメから利用できるものです。</p>
+<div class="actions"><button id="save" disabled>設定を保存</button><button id="refresh">再取得</button><span id="message" role="status" aria-live="polite">読み込み中…</span></div></div>
+<p class="help">対象は「標準」エンジンです。VOICEVOX・棒読みちゃん等は対象外です。日英混在のコメントは全体を日本語判定、漢字だけの中国語も日本語判定になります。通常のコメントテスターはサイト情報がないため「その他」を使います。</p>
+<details><summary>診断情報</summary><pre id="status"></pre></details>
 <script>
-async function refresh(){try{const r=await fetch('/api/plugins/local.onecomme.auto-japanese-speech');if(!r.ok)throw Error(r.status);document.getElementById('status').textContent=JSON.stringify(await r.json(),null,2)}catch(e){document.getElementById('status').textContent='取得できませんでした：'+e.message}}
-document.getElementById('refresh').onclick=refresh;refresh();
+'use strict';
+const api='/api/plugins/local.onecomme.auto-japanese-speech';
+const names={niconama:'ニコニコ',fc2:'FC2',twitch:'Twitch',kick:'Kick',twicas:'ツイキャス',youtube:'YouTube',other:'その他・テスター'};
+const controls={};let current;
+const $=id=>document.getElementById(id);
+function option(select,value,label){const o=document.createElement('option');o.value=value;o.textContent=label;select.append(o)}
+function voiceSelect(select,voices,value,empty){select.replaceChildren();option(select,'',empty);for(const v of voices)option(select,v.name,`${v.name} (${v.lang})`);if(value&&!voices.some(v=>v.name===value))option(select,value,`${value}（現在利用できません）`);select.value=value||''}
+function render(data){
+ current=data.settings;$('rows').replaceChildren();
+ const all=Array.from(new Map(data.windows.flatMap(w=>w.voices).map(v=>[v.name,v])).values()).sort((a,b)=>a.name.localeCompare(b.name));
+ voiceSelect($('global'),all.filter(v=>/^ja(?:[-_]|$)/i.test(v.lang)),current.japaneseVoice,'自動選択');$('global').disabled=false;
+ for(const [site,label] of Object.entries(names)){
+  const r=current.sites?.[site]||{};const tr=document.createElement('tr');const td=document.createElement('td');td.textContent=label;tr.append(td);const row={};
+  for(const field of ['voice','japaneseMode','japaneseVoice']){const cell=document.createElement('td');const s=document.createElement('select');s.setAttribute('aria-label',`${label} ${field==='voice'?'通常の声':field==='japaneseMode'?'日本語コメントの扱い':'日本語の声'}`);cell.append(s);tr.append(cell);row[field]=s}
+  voiceSelect(row.voice,all,r.voice,'わんコメ本体の設定');option(row.japaneseMode,'auto','日本語の声に切り替える');option(row.japaneseMode,'site','同じ声を使う');row.japaneseMode.value=r.japaneseMode||'auto';
+  voiceSelect(row.japaneseVoice,all.filter(v=>/^ja(?:[-_]|$)/i.test(v.lang)),r.japaneseVoice,'共通の日本語音声');
+  const toggle=()=>{row.japaneseVoice.disabled=row.japaneseMode.value==='site'};row.japaneseMode.onchange=toggle;toggle();controls[site]=row;$('rows').append(tr);
+ }
+ $('status').textContent=JSON.stringify(data,null,2);$('save').disabled=false;
+ return all.length;
+}
+async function load(){ $('refresh').disabled=true;$('save').disabled=true;try{const r=await fetch(api);const packet=await r.json();const data=packet.response||packet;if(!r.ok||packet.code>=400)throw Error(data.error||r.status);const count=render(data);$('message').textContent=count?'設定を読み込みました':'音声が取得できません。わんコメの読み上げ画面を開き、再取得してください。'}catch(e){$('message').textContent='取得失敗: '+e.message}finally{$('refresh').disabled=false}}
+$('save').onclick=async()=>{const sites={};for(const [site,row] of Object.entries(controls))sites[site]=Object.fromEntries(Object.entries(row).map(([k,v])=>[k,v.value]));$('save').disabled=true;$('refresh').disabled=true;try{const r=await fetch(api,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({japaneseVoice:$('global').value,sites})});const packet=await r.json();const data=packet.response||packet;if(!r.ok||packet.code>=400)throw Error(data.error||r.status);render(data);$('message').textContent='保存しました。次の読み上げから反映されます。'}catch(e){$('message').textContent='保存失敗: '+e.message}finally{$('save').disabled=false;$('refresh').disabled=false}};
+$('refresh').onclick=load;load();
 </script></html>

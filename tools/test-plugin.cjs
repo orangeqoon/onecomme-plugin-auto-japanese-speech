@@ -1,15 +1,41 @@
-const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
-const path=require('path');
+'use strict';
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict'),path=require('path'),{EventEmitter}=require('events');
 const source=fs.readFileSync(path.resolve(__dirname,'../plugin.js'),'utf8');
-const calls=[];let voices=[{name:'English',lang:'en-US'},{name:'Microsoft Sayaka - Japanese (Japan)',lang:'ja-JP'}];
-const synth={getVoices:()=>voices,speak(u){calls.push(u)}};
-const context={window:{speechSynthesis:synth},module:{exports:{}}};vm.createContext(context);
-vm.runInContext(source+';module.exports.test={installInRenderer,removeFromRenderer}',context);
-const {installInRenderer:install,removeFromRenderer:remove}=context.module.exports.test;
-const original=synth.speak;install({japaneseVoice:voices[1].name});
-for(const text of ['こんにちは','日本語','カタカナ','ﾊﾛｰ','Hello 日本語']){const u={text,voice:voices[0],rate:1.2,volume:.32};synth.speak(u);assert.equal(u.voice,voices[1]);assert.equal(u.rate,1.2);assert.equal(u.volume,.32)}
-for(const text of ['Hello world','Bonjour','안녕하세요','123 😀']){const u={text,voice:voices[0]};synth.speak(u);assert.equal(u.voice,voices[0])}
-const wrapper=synth.speak;install({});assert.equal(synth.speak,wrapper);
-voices=[];const u={text:'日本語',voice:{name:'original'}};synth.speak(u);assert.equal(u.voice.name,'original');
-remove();assert.equal(synth.speak,original);assert.equal(calls.length,10);
-console.log('PASS: Japanese, English, other languages, mixed text, missing voice, idempotence, cleanup, rate and volume (10 utterances)');
+async function main(){
+ const calls=[];let voices=[{name:'English A',lang:'en-US'},{name:'English B',lang:'en-GB'},{name:'Microsoft Sayaka - Japanese (Japan)',lang:'ja-JP'},{name:'Japanese B',lang:'ja-JP'}];
+ const synth={getVoices:()=>voices,speak(u){calls.push({...u})}};
+ const renderer={window:{speechSynthesis:synth}};vm.createContext(renderer);
+ const app=new EventEmitter(),wc=new EventEmitter();wc.getURL=()=> 'file:///app/out/renderer/index.html';wc.isDestroyed=()=>false;wc.executeJavaScript=async script=>vm.runInContext(script,renderer);
+ const stored={};const store={get:(k,f)=>stored[k]??f,set:values=>Object.assign(stored,values)};
+ const ctx={module:{exports:{}},require:name=>{assert.equal(name,'electron');return {app,BrowserWindow:{getAllWindows:()=>[{id:1,webContents:wc}]}}}};vm.createContext(ctx);
+ vm.runInContext(source+';module.exports.test={installInRenderer,removeFromRenderer,normalizeSettings,siteKey}',ctx);
+ const plugin=ctx.module.exports,helpers=plugin.test;const original=synth.speak;
+ plugin.init({store},{});await Promise.resolve();
+ function speak(text){const u={text,voice:voices[0],rate:1.2,volume:.32,pitch:.9};synth.speak(u);return u}
+ for(const text of ['こんにちは','日本語','カタカナ','ﾊﾛｰ','Hello 日本語'])assert.equal(speak(text).voice,voices[2]);
+ for(const text of ['Hello world','Bonjour','안녕하세요','123 😀'])assert.equal(speak(text).voice,voices[0]);
+ const settings={japaneseVoice:voices[2].name,sites:{twitch:{voice:'English A',japaneseVoice:'Japanese B'},kick:{voice:'English B'},niconama:{voice:'Japanese B',japaneseMode:'site'},fc2:{voice:'Japanese B',japaneseMode:'site'},twicas:{voice:'Japanese B',japaneseMode:'site'}}};
+ const saved=await plugin.request({method:'PUT',body:settings});assert.equal(saved.code,200);assert.equal(stored.sites.kick.voice,'English B');assert.equal(saved.response.windows[0].voices.length,4);
+ const texts=await Promise.all(['twitch','kick','twitch'].map(site=>plugin.filterSpeech('same text',null,{}, {service:site})));
+ assert.deepEqual(texts.map(t=>speak(t).voice.name),['English A','English B','English A']);
+ assert.equal(speak(await plugin.filterSpeech('こんにちは',null,{}, {service:'twitch'})).voice.name,'Japanese B');
+ assert.equal(speak(await plugin.filterSpeech('こんにちは',null,{}, {service:'kick'})).voice.name,voices[2].name);
+ for(const site of ['niconama','fc2','twicas'])assert.equal(speak(await plugin.filterSpeech('hello 日本語',null,{}, {service:site})).voice.name,'Japanese B');
+ for(const [alias,key] of [['niconico','niconama'],['fc2live','fc2'],['twitcasting','twicas']])assert.equal(helpers.siteKey({service:alias}),key);
+ assert.equal(helpers.siteKey({service:'unknown'}),'other');
+ assert.equal(await plugin.filterSpeech('',null,{}, {service:'twitch'}),'');
+ const twice=await plugin.filterSpeech(texts[0],null,{}, {service:'kick'});assert.equal((twice.match(/OCSITE:/g)||[]).length,1);
+ assert.equal(await plugin.filterSpeech('hello',null,{defaultEngine:'voicevox'},{service:'twitch'}),'hello');
+ plugin.subscribe('services',[{id:'fc2-custom',options:{speechType:'bouyomichan'}}]);assert.equal(await plugin.filterSpeech('hello',null,{}, {id:'fc2-custom',service:'fc2'}),'hello');
+ const fallback=speak('plain');assert.equal(fallback.rate,1.2);assert.equal(fallback.volume,.32);assert.equal(fallback.pitch,.9);
+ assert.ok(calls.every(u=>!u.text.includes('OCSITE:')));
+ const before=JSON.stringify(stored);assert.equal((await plugin.request({method:'PUT',body:{sites:{kick:{japaneseMode:'bad'}}}})).code,400);assert.equal(JSON.stringify(stored),before);
+ const previous=plugin.settings;store.set=()=>{throw Error('disk failure')};assert.equal((await plugin.request({method:'PUT',body:settings})).code,500);assert.equal(plugin.settings,previous);store.set=values=>Object.assign(stored,values);
+ assert.equal((await plugin.request({method:'POST'})).code,405);
+ const wrapper=synth.speak;await wc.executeJavaScript(`(${helpers.installInRenderer.toString()})(${JSON.stringify(settings)})`);assert.equal(synth.speak,wrapper);
+ const available=voices;voices=[];assert.equal(speak('日本語').voice,undefined);voices=available;
+ plugin.destroy();await Promise.resolve();assert.equal(synth.speak,original);assert.equal(app.listenerCount('browser-window-created'),0);assert.equal(wc.listenerCount('did-finish-load'),0);
+ plugin.init({store},{});await Promise.resolve();assert.equal(plugin.settings.sites.kick.voice,'English B');assert.equal(speak(await plugin.filterSpeech('same text',null,{}, {service:'kick'})).voice.name,'English B');plugin.destroy();
+ console.log('PASS: legacy language routing, identical queued site texts, Japanese/site overrides, aliases, external engine bypass, metadata stripping, validation, persistence/restart, save failure, lifecycle cleanup and speech properties');
+}
+main().catch(e=>{console.error(e);process.exitCode=1});
