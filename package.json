@@ -1,6 +1,6 @@
 {
   "name": "onecomme-plugin-auto-japanese-speech",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "private": true,
   "description": "Switch Japanese comments to a Japanese Web Speech voice in OneComme",
   "main": "plugin.js",
